@@ -1,0 +1,1351 @@
+# -*- coding: utf-8 -*-
+"""Bob's Enhanced Midi Convert - Improved UI Version
+
+June 10, 2025
+Improvements:
+- Fixed upload button styling inconsistencies
+- Centralized main controls
+- Removed broken status metrics
+- Simplified layout
+- Better visual hierarchy
+"""
+
+#!/usr/bin/env python
+import sys
+import subprocess
+import importlib
+import logging
+import os
+import re
+import shutil
+import tempfile
+import time
+import numpy as np
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Generator
+from datetime import datetime
+
+# --------------- Package Installation ---------------
+
+REQUIRED_PACKAGES: Dict[str, str] = {
+    'ffmpeg': 'ffmpeg-python',
+    'piano_transcription_inference': 'piano-transcription-inference',
+    'yt_dlp': 'yt-dlp',
+    'librosa': 'librosa',
+    'torch': 'torch',
+    'tqdm': 'tqdm',
+    'ipywidgets': 'ipywidgets',
+    'pretty_midi': 'pretty-midi',
+    'unidecode': 'Unidecode',
+}
+
+def check_and_install_packages(packages: Dict[str, str]) -> None:
+    """Check if required packages are installed and install any missing ones."""
+    missing_packages = []
+    for module_name, package_name in packages.items():
+        try:
+            importlib.import_module(module_name)
+        except ImportError:
+            missing_packages.append(package_name)
+    if missing_packages:
+        print("📦 Installing missing packages...")
+        for pkg in missing_packages:
+            subprocess.check_call([sys.executable, '-m', 'pip', 'install', pkg],
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("✅ Installation complete!")
+
+check_and_install_packages(REQUIRED_PACKAGES)
+
+# --------------- Imports ---------------
+
+import torch
+import librosa
+import ffmpeg
+import yt_dlp
+from piano_transcription_inference import PianoTranscription, sample_rate
+from tqdm.notebook import tqdm
+import ipywidgets as widgets
+from IPython.display import display, clear_output, HTML, Javascript
+from google.colab import files
+import pretty_midi
+import zipfile
+from unidecode import unidecode
+
+# --------------- Enhanced Styling System ---------------
+
+def get_enhanced_styles():
+    """Premium glass-morphism design with improved button styling."""
+    return '''
+    <style>
+    /* Import Google Fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+    /* CSS Variables for easy theming */
+    :root {
+        --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        --success-gradient: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        --error-gradient: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+        --warning-gradient: linear-gradient(135deg, #f2994a 0%, #f2c94c 100%);
+        --glass-bg: rgba(255, 255, 255, 0.1);
+        --glass-border: rgba(255, 255, 255, 0.2);
+        --text-primary: #1a1a1a;
+        --text-secondary: #4a4a4a;
+        --shadow-color: rgba(0, 0, 0, 0.1);
+    }
+
+    /* Global styles */
+    .midi-converter * {
+        box-sizing: border-box !important;
+    }
+
+    .midi-converter {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 20px;
+        background: transparent;
+        color: var(--text-primary) !important;
+    }
+
+    /* Premium glass-morphism cards */
+    .glass-card {
+        background: var(--glass-bg);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid var(--glass-border);
+        border-radius: 20px;
+        padding: 24px;
+        margin: 12px 0;
+        box-shadow: 0 8px 32px var(--shadow-color);
+        transition: all 0.3s ease;
+    }
+
+    .glass-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 40px var(--shadow-color);
+    }
+
+    /* Section headers with gradient text */
+    .section-title {
+        font-size: 18px !important;
+        font-weight: 700 !important;
+        background: var(--primary-gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin: 0 0 20px 0 !important;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .section-title::before {
+        content: '';
+        width: 4px;
+        height: 24px;
+        background: var(--primary-gradient);
+        border-radius: 2px;
+    }
+
+    /* Enhanced header card */
+    .header-card {
+        background: var(--primary-gradient);
+        border: none;
+        color: white;
+        text-align: center;
+        padding: 40px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .header-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        animation: pulse 4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); opacity: 0.5; }
+        50% { transform: scale(1.1); opacity: 0.8; }
+    }
+
+    .header-card h1 {
+        font-size: 32px !important;
+        font-weight: 800 !important;
+        margin: 0 0 12px 0 !important;
+        position: relative;
+        z-index: 1;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .header-card p {
+        font-size: 16px !important;
+        opacity: 0.95;
+        margin: 0 !important;
+        position: relative;
+        z-index: 1;
+    }
+
+    /* Feature pills */
+    .feature-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 20px;
+        justify-content: center;
+    }
+
+    .feature-pill {
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 20px;
+        padding: 6px 16px;
+        font-size: 12px !important;
+        font-weight: 500;
+        color: white;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s ease;
+    }
+
+    .feature-pill:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: translateY(-1px);
+    }
+
+    /* Enhanced input styling */
+    .widget-text input,
+    .widget-textarea textarea,
+    .widget-float-text input {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 2px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 12px !important;
+        padding: 10px 16px !important;
+        font-size: 14px !important;
+        font-family: 'Inter', sans-serif !important;
+        transition: all 0.3s ease !important;
+        color: var(--text-primary) !important;
+    }
+
+    .widget-text input:focus,
+    .widget-textarea textarea:focus,
+    .widget-float-text input:focus {
+        border-color: #667eea !important;
+        background: rgba(255, 255, 255, 0.08) !important;
+        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1) !important;
+        outline: none !important;
+    }
+
+    .widget-textarea textarea {
+        min-height: 100px !important;
+        resize: vertical !important;
+    }
+
+    /* Enhanced button styling */
+    .widget-button {
+        border-radius: 12px !important;
+        font-weight: 600 !important;
+        font-size: 14px !important;
+        padding: 12px 24px !important;
+        transition: all 0.3s ease !important;
+        text-transform: none !important;
+        letter-spacing: 0.5px !important;
+    }
+
+    .widget-button.success {
+        background: var(--success-gradient) !important;
+        border: none !important;
+        color: white !important;
+        box-shadow: 0 4px 16px rgba(17, 153, 142, 0.3) !important;
+    }
+
+    .widget-button.success:hover:not(:disabled) {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 20px rgba(17, 153, 142, 0.4) !important;
+    }
+
+    .widget-button.danger {
+        background: var(--error-gradient) !important;
+        border: none !important;
+        color: white !important;
+        box-shadow: 0 4px 16px rgba(235, 51, 73, 0.3) !important;
+    }
+
+    .widget-button.danger:hover:not(:disabled) {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 20px rgba(235, 51, 73, 0.4) !important;
+    }
+
+    .widget-button:disabled {
+        opacity: 0.5 !important;
+        cursor: not-allowed !important;
+        transform: none !important;
+    }
+
+    /* Enhanced checkbox styling */
+    .widget-checkbox {
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+    }
+
+    .widget-checkbox input[type="checkbox"] {
+        width: 20px !important;
+        height: 20px !important;
+        border-radius: 6px !important;
+        border: 2px solid rgba(255, 255, 255, 0.2) !important;
+        background: rgba(255, 255, 255, 0.05) !important;
+        cursor: pointer !important;
+    }
+
+    .widget-checkbox input[type="checkbox"]:checked {
+        background: var(--primary-gradient) !important;
+        border-color: transparent !important;
+    }
+
+    /* Label styling */
+    .widget-label {
+        font-weight: 500 !important;
+        color: var(--text-primary) !important;
+        font-size: 13px !important;
+        margin-bottom: 4px !important;
+    }
+
+    /* Enhanced file upload styling */
+    .widget-file-upload {
+        border: 2px dashed #667eea !important;
+        border-radius: 12px !important;
+        padding: 24px !important;
+        background: rgba(102, 126, 234, 0.05) !important;
+        transition: all 0.3s ease !important;
+        position: relative !important;
+        min-height: 80px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    .widget-file-upload:hover {
+        border-color: #764ba2 !important;
+        background: rgba(102, 126, 234, 0.1) !important;
+        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.2) !important;
+    }
+
+    .widget-file-upload::before {
+        content: '📁 Click to upload or drag files here';
+        position: absolute;
+        font-size: 14px;
+        font-weight: 500;
+        color: #667eea;
+        pointer-events: none;
+    }
+
+    .widget-file-upload.audio-upload::before {
+        content: '🎵 Upload audio files (MP3, WAV, FLAC, M4A, OGG)';
+    }
+
+    .widget-file-upload.cookie-upload::before {
+        content: '🍪 Upload cookie file (optional, for age-restricted videos)';
+    }
+
+    /* Current file display */
+    .current-file {
+        background: var(--primary-gradient);
+        color: white;
+        padding: 16px 20px;
+        border-radius: 12px;
+        font-weight: 500;
+        font-size: 14px;
+        text-align: center;
+        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+    }
+
+    .current-file::before {
+        content: '📄';
+        font-size: 18px;
+    }
+
+    /* Log container */
+    .log-container {
+        background: rgba(0, 0, 0, 0.03);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 12px;
+        padding: 16px;
+        min-height: 300px;
+        max-height: 500px;
+        overflow-y: auto;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace !important;
+        font-size: 12px !important;
+        line-height: 1.6;
+    }
+
+    .log-entry {
+        padding: 4px 0;
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .log-entry .timestamp {
+        opacity: 0.5;
+        font-size: 11px;
+        min-width: 60px;
+    }
+
+    .log-success { color: #11998e !important; }
+    .log-error { color: #eb3349 !important; }
+    .log-warning { color: #f2994a !important; }
+    .log-info { color: var(--text-secondary) !important; }
+
+    /* Main control buttons centered */
+    .main-controls {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        margin: 30px 0;
+    }
+
+    .main-controls .widget-button {
+        min-width: 200px !important;
+        height: 50px !important;
+        font-size: 16px !important;
+    }
+
+    /* Dark mode enhancements */
+    @media (prefers-color-scheme: dark),
+           (prefers-color-scheme: no-preference) {
+        :root {
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --shadow-color: rgba(0, 0, 0, 0.3);
+        }
+
+        .log-container {
+            background: rgba(0, 0, 0, 0.2);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .widget-text input,
+        .widget-textarea textarea,
+        .widget-float-text input {
+            background: rgba(0, 0, 0, 0.2) !important;
+            border-color: rgba(255, 255, 255, 0.1) !important;
+            color: #e0e0e0 !important;
+        }
+    }
+
+    /* Colab dark theme specific */
+    body[data-theme="dark"] .midi-converter,
+    .dark .midi-converter {
+        --glass-bg: rgba(255, 255, 255, 0.05);
+        --glass-border: rgba(255, 255, 255, 0.1);
+        --text-primary: #e0e0e0;
+        --text-secondary: #a0a0a0;
+        --shadow-color: rgba(0, 0, 0, 0.3);
+    }
+
+    /* Scrollbar styling */
+    .log-container::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    .log-container::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 4px;
+    }
+
+    .log-container::-webkit-scrollbar-thumb {
+        background: rgba(102, 126, 234, 0.3);
+        border-radius: 4px;
+    }
+
+    .log-container::-webkit-scrollbar-thumb:hover {
+        background: rgba(102, 126, 234, 0.5);
+    }
+
+    /* Responsive design */
+    @media (max-width: 768px) {
+        .midi-converter {
+            padding: 12px;
+        }
+
+        .glass-card {
+            padding: 16px;
+            margin: 8px 0;
+        }
+
+        .header-card {
+            padding: 24px;
+        }
+
+        .header-card h1 {
+            font-size: 24px !important;
+        }
+
+        .main-controls {
+            flex-direction: column;
+        }
+
+        .main-controls .widget-button {
+            width: 100% !important;
+        }
+    }
+
+    /* Loading animation */
+    @keyframes gradient-shift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+
+    .loading {
+        background: linear-gradient(-45deg, #667eea, #764ba2, #f093fb, #f5576c);
+        background-size: 400% 400%;
+        animation: gradient-shift 3s ease infinite;
+    }
+
+    /* Force styles in Colab environment */
+    .cell-output-ipywidget-background {
+        background: transparent !important;
+    }
+
+    .p-Widget, .jupyter-widgets {
+        background: transparent !important;
+    }
+
+    /* Hide default Colab descriptions */
+    .widget-label-basic {
+        display: none !important;
+    }
+
+    /* Our custom labels should show */
+    .widget-html .widget-html-content {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    </style>
+    '''
+
+# --------------- Utility Functions ---------------
+
+def chunk_audio(audio, sr: int, chunk_sec: float = 10.0) -> List:
+    """Split audio into chunks."""
+    if len(audio) == 0:
+        return []
+
+    chunk_size = int(chunk_sec * sr)
+    if chunk_size <= 0:
+        raise ValueError("Invalid chunk size")
+
+    chunks = []
+    for i in range(0, len(audio), chunk_size):
+        chunk = audio[i:i + chunk_size]
+        if len(chunk) > sr * 0.1:
+            chunks.append(chunk)
+
+    return chunks
+
+# --------------- Status Manager ---------------
+
+class StatusManager:
+    """Simplified status management with logging only."""
+
+    def __init__(self):
+        self.logs = []
+        self._create_displays()
+
+    def _create_displays(self):
+        """Create simplified display elements."""
+        # Current file
+        self.current_file_display = widgets.HTML(
+            value="<div class='current-file'>🎵 Ready to convert audio to MIDI</div>",
+            layout=widgets.Layout(width='100%')
+        )
+
+        # Log display
+        self.log_display = widgets.HTML(
+            value="<div class='log-container'><div class='log-entry log-info'><span class='timestamp'>00:00:00</span>System initialized and ready</div></div>",
+            layout=widgets.Layout(width='100%')
+        )
+
+    def update_current_file(self, filename: str, operation: str = "Processing"):
+        """Update current file display."""
+        icons = {
+            "Processing": "⚙️",
+            "Downloading": "⬇️",
+            "Transcribing": "🎹",
+            "Completed": "✅"
+        }
+        icon = icons.get(operation, "📄")
+
+        if filename:
+            self.current_file_display.value = f"<div class='current-file'>{icon} {operation}: {filename}</div>"
+        else:
+            self.current_file_display.value = "<div class='current-file'>✨ All conversions completed!</div>"
+
+    def log(self, message: str, level: str = "info"):
+        """Add log entry."""
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        icons = {
+            "success": "✅",
+            "error": "❌",
+            "warning": "⚠️",
+            "info": "ℹ️"
+        }
+        icon = icons.get(level, "")
+
+        log_class = f"log-{level}"
+        log_entry = f"<div class='log-entry {log_class}'><span class='timestamp'>{timestamp}</span>{icon} {message}</div>"
+        self.logs.append(log_entry)
+
+        # Keep last 50 entries
+        if len(self.logs) > 50:
+            self.logs = self.logs[-50:]
+
+        self._refresh_logs()
+
+    def _refresh_logs(self):
+        """Refresh log display."""
+        log_html = "<div class='log-container'>" + "".join(self.logs) + "</div>"
+        self.log_display.value = log_html
+
+# --------------- Rate Limiter ---------------
+
+class RateLimiter:
+    """Rate limiter for YouTube requests."""
+    def __init__(self, min_interval: float = 2.0):
+        self.min_interval = min_interval
+        self.last_request = 0
+
+    def wait_if_needed(self):
+        current_time = time.time()
+        elapsed = current_time - self.last_request
+        if elapsed < self.min_interval:
+            time.sleep(self.min_interval - elapsed)
+        self.last_request = time.time()
+
+# --------------- Converter Class ---------------
+
+class YouTubeToMidiConverter:
+    """Main converter class with status integration."""
+
+    def __init__(self, status_manager: StatusManager, chunk_sec: float = 10.0):
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.transcriber = PianoTranscription(device=self.device)
+        self.sample_rate = sample_rate
+        self.chunk_sec = chunk_sec
+        self.rate_limiter = RateLimiter()
+        self.temp_files = []
+        self.max_file_size_mb = 500
+        self.max_duration_minutes = 60
+        self.status = status_manager
+
+        self.status.log(f"Converter initialized (Device: {self.device})")
+
+    @staticmethod
+    def is_valid_youtube_url(url: str) -> bool:
+        youtube_regex = (
+            r'(https?://)?(www\.)?'
+            r'(youtube|youtu|youtube\-nocookie)\.(com|be)/'
+            r'(watch\?v=|embed/|v/|.+\?v=)?([^\s&]+)'
+        )
+        return re.match(youtube_regex, url) is not None
+
+    @staticmethod
+    def sanitize_filename(name: str, max_length: int = 200) -> str:
+        name = unidecode(name)
+        replacements = {
+            '/': '_', '\\': '_', ':': '-', '*': '_', '?': '_',
+            '"': "'", '<': '[', '>': ']', '|': '_', '\0': '_',
+            '\n': ' ', '\r': ' ', '\t': ' ', '【': ' ', '】': ' '
+        }
+
+        for old, new in replacements.items():
+            name = name.replace(old, new)
+
+        name = re.sub(r'[\s-]+', ' ', name).strip('. \t')
+        if not name:
+            name = 'untitled'
+        if len(name) > max_length:
+            name = name[:max_length]
+        return name
+
+    def cleanup_temp_files(self):
+        cleaned = 0
+        for file_path in self.temp_files:
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+                    cleaned += 1
+            except Exception:
+                pass
+        if cleaned > 0:
+            self.status.log(f"Cleaned up {cleaned} temporary files")
+        self.temp_files.clear()
+
+    def create_session_directory(self, base_dir: Path) -> Path:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        session_dir = base_dir / f"midi_conversion_{timestamp}"
+        session_dir.mkdir(exist_ok=True)
+        return session_dir
+
+    def get_unique_filepath(self, filepath: Path) -> Path:
+        if not filepath.exists():
+            return filepath
+
+        base = filepath.stem
+        suffix = filepath.suffix
+        parent = filepath.parent
+        counter = 1
+
+        while True:
+            new_filepath = parent / f"{base}_{counter}{suffix}"
+            if not new_filepath.exists():
+                return new_filepath
+            counter += 1
+
+    def validate_audio_file(self, file_path: Path) -> Tuple[bool, str]:
+        try:
+            file_size_mb = file_path.stat().st_size / (1024 * 1024)
+            if file_size_mb > self.max_file_size_mb:
+                return False, f"File too large: {file_size_mb:.1f}MB"
+
+            duration = librosa.get_duration(filename=str(file_path))
+            if duration > self.max_duration_minutes * 60:
+                return False, f"Audio too long: {duration/60:.1f} minutes"
+
+            librosa.load(str(file_path), sr=self.sample_rate, duration=1.0)
+            return True, "Valid"
+        except Exception as e:
+            return False, f"Invalid audio file: {str(e)}"
+
+    def download_mp3_from_youtube(self, youtube_url: str, output_dir: Path,
+                                  custom_name: Optional[str] = None,
+                                  idx: Optional[int] = None,
+                                  total_tasks: int = 1,
+                                  cookiefile: Optional[str] = None) -> Path:
+        if not self.is_valid_youtube_url(youtube_url):
+            raise ValueError(f"Invalid YouTube URL")
+
+        self.rate_limiter.wait_if_needed()
+        self.status.update_current_file(youtube_url, "Downloading")
+
+        output_template = str(output_dir / '%(title)s.%(ext)s')
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': output_template,
+            'noplaylist': True,
+            'quiet': True,
+            'no_warnings': True,
+            'ignoreerrors': True,
+            'writesubtitles': False,
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+        }
+
+        if cookiefile:
+            ydl_opts['cookiefile'] = cookiefile
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info_dict = ydl.extract_info(youtube_url, download=True)
+                if info_dict is None:
+                    raise ValueError("Download failed")
+                mp3_file = Path(ydl.prepare_filename(info_dict)).with_suffix('.mp3')
+
+            if custom_name:
+                sanitized_name = self.sanitize_filename(custom_name)
+                filename = f"{sanitized_name}_{idx+1}.mp3" if total_tasks > 1 and idx is not None else f"{sanitized_name}.mp3"
+            else:
+                title = info_dict.get('title', 'video')
+                filename = f"{self.sanitize_filename(title)}.mp3"
+
+            custom_filepath = self.get_unique_filepath(output_dir / filename)
+            shutil.move(str(mp3_file), str(custom_filepath))
+
+            if not custom_filepath.exists():
+                raise FileNotFoundError("MP3 file not found")
+
+            self.temp_files.append(custom_filepath)
+            self.status.log(f"Downloaded: {custom_filepath.name}")
+            return custom_filepath
+
+        except Exception as e:
+            self.status.log(f"Download failed: {e}", "error")
+            raise
+
+    def trim_audio(self, input_path: Path, output_path: Path,
+                   start_time: float, end_time: Optional[float] = None) -> None:
+        try:
+            stream = ffmpeg.input(str(input_path))
+            if end_time is None or end_time == 0:
+                trimmed = stream.audio.filter('atrim', start=start_time).filter('asetpts', 'PTS-STARTPTS')
+            else:
+                trimmed = stream.audio.filter('atrim', start=start_time, end=end_time).filter('asetpts', 'PTS-STARTPTS')
+            ffmpeg.output(trimmed, str(output_path)).run(overwrite_output=True, quiet=True)
+
+            self.temp_files.append(output_path)
+            self.status.log(f"Trimmed audio: {start_time}s to {end_time or 'end'}s")
+        except Exception as e:
+            self.status.log(f"Trim failed: {e}", "error")
+            raise
+
+    def safe_transcribe(self, audio_chunk, output_path: str, retry_on_gpu_fail: bool = True):
+        try:
+            self.transcriber.transcribe(audio_chunk, output_path)
+        except RuntimeError as e:
+            if "CUDA out of memory" in str(e) and retry_on_gpu_fail and self.device == 'cuda':
+                self.status.log("GPU memory issue, using CPU", "warning")
+                cpu_transcriber = PianoTranscription(device='cpu')
+                cpu_transcriber.transcribe(audio_chunk, output_path)
+            else:
+                raise
+
+    def chunked_convert_audio_to_midi(self, audio_file_path: Path, midi_file_path: Path,
+                                      max_duration: float = 2.0,
+                                      cancel_flag: Optional[List[bool]] = None) -> bool:
+        try:
+            self.status.update_current_file(audio_file_path.name, "Transcribing")
+
+            duration = librosa.get_duration(filename=str(audio_file_path))
+            total_chunks = int(np.ceil(duration / self.chunk_sec))
+            self.status.log(f"Processing {total_chunks} chunks")
+
+            audio, _ = librosa.load(str(audio_file_path), sr=self.sample_rate, mono=True)
+            audio_chunks = chunk_audio(audio, self.sample_rate, self.chunk_sec)
+            merged_midi = pretty_midi.PrettyMIDI()
+            current_time_offset = 0.0
+
+            for i, chunk in enumerate(audio_chunks):
+                if cancel_flag and cancel_flag[0]:
+                    self.status.log("Conversion cancelled", "warning")
+                    return False
+
+                with tempfile.NamedTemporaryFile(suffix='.mid', delete=False) as tmp:
+                    tmp_midi_path = Path(tmp.name)
+
+                self.safe_transcribe(chunk, str(tmp_midi_path))
+                pm_chunk = pretty_midi.PrettyMIDI(str(tmp_midi_path))
+                tmp_midi_path.unlink(missing_ok=True)
+
+                for instr in pm_chunk.instruments:
+                    for note in instr.notes:
+                        note.start += current_time_offset
+                        note.end += current_time_offset
+                        if (note.end - note.start) > max_duration:
+                            note.end = note.start + max_duration
+
+                merged_midi.instruments.extend(pm_chunk.instruments)
+                current_time_offset += len(chunk) / self.sample_rate
+
+            merged_midi.write(str(midi_file_path))
+            self.status.log(f"MIDI created: {midi_file_path.name}")
+            return True
+
+        except Exception as e:
+            self.status.log(f"Transcription failed: {e}", "error")
+            raise
+
+# --------------- Unified UI ---------------
+
+def create_unified_ui():
+    """Create improved UI with centralized controls and better upload buttons."""
+
+    # Apply enhanced styles
+    display(HTML(get_enhanced_styles()))
+
+    # Inject JavaScript for better dark mode detection
+    display(Javascript('''
+        // Check for Colab dark mode and add class
+        const isDarkMode = document.documentElement.getAttribute('theme') === 'dark' ||
+                          document.body.classList.contains('dark') ||
+                          window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+        if (isDarkMode) {
+            document.body.classList.add('colab-dark-theme');
+        }
+    '''))
+
+    display(HTML('<div class="midi-converter">'))
+
+    # Premium header
+    header_html = """
+    <div class="glass-card header-card">
+        <h1>🎼 YouTube to MIDI Converter</h1>
+        <p>Transform any audio into MIDI with AI-powered piano transcription</p>
+        <div class="feature-pills">
+            <div class="feature-pill">🌓 Auto Dark Mode</div>
+            <div class="feature-pill">⚡ GPU Acceleration</div>
+            <div class="feature-pill">📊 Real-time Progress</div>
+            <div class="feature-pill">🎯 Batch Processing</div>
+            <div class="feature-pill">🔍 Smart Validation</div>
+            <div class="feature-pill">💾 Auto Downloads</div>
+        </div>
+    </div>
+    """
+    display(HTML(header_html))
+
+    # Initialize status manager
+    status_manager = StatusManager()
+
+    # Enhanced input creation
+    youtube_urls_input = widgets.Textarea(
+        value='',
+        placeholder='Enter YouTube URLs here (one per line)\nExample: https://youtube.com/watch?v=...',
+        description='',
+        layout=widgets.Layout(width='100%', min_height='120px')
+    )
+
+    custom_name_input = widgets.Text(
+        value='',
+        placeholder='e.g. "My Song" (optional)',
+        description='',
+        layout=widgets.Layout(width='100%')
+    )
+
+    # Enhanced file upload widgets
+    upload_button = widgets.FileUpload(
+        accept='.mp3,.wav,.flac,.m4a,.ogg',
+        multiple=True,
+        description='',
+        layout=widgets.Layout(width='100%')
+    )
+
+    cookie_upload = widgets.FileUpload(
+        accept='.txt',
+        multiple=False,
+        description='',
+        layout=widgets.Layout(width='100%')
+    )
+
+    # Settings widgets
+    chunk_duration_input = widgets.FloatText(
+        value=10.0,
+        description='',
+        layout=widgets.Layout(width='100%')
+    )
+
+    max_duration_input = widgets.FloatText(
+        value=0.2,
+        description='',
+        layout=widgets.Layout(width='100%')
+    )
+
+    start_time_input = widgets.FloatText(
+        value=0.0,
+        description='',
+        layout=widgets.Layout(width='100%')
+    )
+
+    end_time_input = widgets.FloatText(
+        value=0.0,
+        description='',
+        layout=widgets.Layout(width='100%')
+    )
+
+    zip_files_checkbox = widgets.Checkbox(
+        value=True,
+        description='Zip multiple files',
+        indent=False,
+        layout=widgets.Layout(width='auto')
+    )
+
+    keep_mp3_checkbox = widgets.Checkbox(
+        value=False,
+        description='Keep downloaded MP3s',
+        indent=False,
+        layout=widgets.Layout(width='auto')
+    )
+
+    # Control buttons
+    start_button = widgets.Button(
+        description='🚀 Start Conversion',
+        button_style='success',
+        layout=widgets.Layout(width='200px', height='50px')
+    )
+
+    cancel_button = widgets.Button(
+        description='⏹️ Cancel',
+        button_style='danger',
+        layout=widgets.Layout(width='200px', height='50px'),
+        disabled=True
+    )
+
+    # Cancellation flag
+    cancel_conversion = [False]
+
+    def disable_buttons():
+        start_button.disabled = True
+        cancel_button.disabled = False
+
+    def enable_buttons():
+        start_button.disabled = False
+        cancel_button.disabled = True
+
+    def validate_inputs(start: float, end: Optional[float], max_duration: float, chunk_duration: float) -> None:
+        if start < 0:
+            raise ValueError("Start time cannot be negative")
+        if end is not None and end > 0 and end < start:
+            raise ValueError("End time must be greater than start time")
+        if max_duration <= 0:
+            raise ValueError("Max note duration must be positive")
+        if chunk_duration <= 0 or chunk_duration > 300:
+            raise ValueError("Chunk duration must be between 0-300 seconds")
+
+    def on_start_button_clicked(b):
+        disable_buttons()
+        cancel_conversion[0] = False
+        process_conversion()
+
+    def on_cancel_button_clicked(b):
+        cancel_conversion[0] = True
+        status_manager.log("Cancellation requested", "warning")
+
+    def process_conversion():
+        try:
+            # Get input values
+            youtube_urls = youtube_urls_input.value.strip()
+            custom_name = custom_name_input.value.strip() or None
+            max_duration = max_duration_input.value
+            start_time = start_time_input.value
+            end_time_val = end_time_input.value
+            end_time = end_time_val if end_time_val > 0 else None
+            chunk_duration = chunk_duration_input.value
+            zip_output = zip_files_checkbox.value
+            keep_mp3 = keep_mp3_checkbox.value
+
+            # Validate inputs
+            validate_inputs(start_time, end_time, max_duration, chunk_duration)
+
+            # Initialize converter
+            converter = YouTubeToMidiConverter(status_manager, chunk_sec=chunk_duration)
+            output_dir = converter.create_session_directory(Path('/content'))
+            status_manager.log(f"Session: {output_dir.name}")
+
+            # Process cookie file
+            cookie_file_path = None
+            if cookie_upload.value:
+                for filename, file_info in cookie_upload.value.items():
+                    cookie_path = output_dir / filename
+                    with open(cookie_path, 'wb') as f:
+                        f.write(file_info['content'])
+                    cookie_file_path = str(cookie_path)
+                    status_manager.log("Cookie uploaded")
+                    break
+
+            # Prepare file lists
+            youtube_urls_list = [url.strip() for url in youtube_urls.splitlines() if url.strip()]
+            uploaded_files = []
+            if upload_button.value:
+                for filename, file_info in upload_button.value.items():
+                    file_path = output_dir / filename
+                    with open(file_path, 'wb') as f:
+                        f.write(file_info['content'])
+                    uploaded_files.append(file_path)
+
+            total_tasks = len(youtube_urls_list) + len(uploaded_files)
+            if total_tasks == 0:
+                status_manager.log("No files provided", "error")
+                enable_buttons()
+                return
+
+            status_manager.log(f"Processing {total_tasks} files")
+
+            results = []
+
+            # Process YouTube URLs
+            for idx, url in enumerate(youtube_urls_list):
+                if cancel_conversion[0]:
+                    break
+
+                try:
+                    # Download
+                    mp3_path = converter.download_mp3_from_youtube(
+                        url, output_dir, custom_name, idx, total_tasks, cookiefile=cookie_file_path
+                    )
+
+                    # Validate
+                    is_valid, validation_msg = converter.validate_audio_file(mp3_path)
+                    if not is_valid:
+                        raise ValueError(validation_msg)
+
+                    # Trim if needed
+                    if start_time > 0 or (end_time is not None and end_time > 0):
+                        trimmed_path = output_dir / f"trimmed_{mp3_path.name}"
+                        converter.trim_audio(mp3_path, trimmed_path, start_time, end_time)
+                        if not keep_mp3:
+                            mp3_path.unlink(missing_ok=True)
+                        mp3_path = trimmed_path
+
+                    # Transcribe
+                    midi_file = output_dir / f"{mp3_path.stem}.mid"
+                    success = converter.chunked_convert_audio_to_midi(
+                        mp3_path, midi_file, max_duration, cancel_conversion
+                    )
+
+                    if success:
+                        results.append((mp3_path, midi_file))
+                        status_manager.log(f"✅ Converted: {mp3_path.name}", "success")
+
+                    # Cleanup
+                    if not keep_mp3 and mp3_path.exists():
+                        mp3_path.unlink()
+
+                except Exception as e:
+                    status_manager.log(f"❌ Failed: {url} - {str(e)}", "error")
+                    completed += 1
+                    status_manager.update_overall_progress(completed, total_tasks)
+
+                if cancel_conversion[0]:
+                    break
+
+            # Process uploaded files
+            if not cancel_conversion[0]:
+                for idx, audio_path in enumerate(uploaded_files):
+                    if cancel_conversion[0]:
+                        break
+
+                    try:
+                        # Validate
+                        is_valid, validation_msg = converter.validate_audio_file(audio_path)
+                        if not is_valid:
+                            raise ValueError(validation_msg)
+
+                        # Trim if needed
+                        if start_time > 0 or (end_time is not None and end_time > 0):
+                            trimmed_path = output_dir / f"trimmed_{audio_path.name}"
+                            converter.trim_audio(audio_path, trimmed_path, start_time, end_time)
+                            audio_path = trimmed_path
+
+                        # Transcribe
+                        midi_file_name = f"{custom_name}_{idx+1}" if custom_name and total_tasks > 1 else audio_path.stem
+                        midi_file = output_dir / f"{midi_file_name}.mid"
+
+                        success = converter.chunked_convert_audio_to_midi(
+                            audio_path, midi_file, max_duration, cancel_conversion
+                        )
+
+                        if success:
+                            results.append((audio_path, midi_file))
+                            status_manager.log(f"✅ Converted: {audio_path.name}", "success")
+
+                    except Exception as e:
+                        status_manager.log(f"❌ Failed: {audio_path.name} - {str(e)}", "error")
+                        completed += 1
+                        status_manager.update_overall_progress(completed, total_tasks)
+
+                    if cancel_conversion[0]:
+                        break
+
+            # Finalize
+            status_manager.update_current_file("", "Completed")
+
+            if cancel_conversion[0]:
+                status_manager.log("Conversion cancelled", "warning")
+            else:
+                status_manager.log("All conversions completed!", "success")
+
+            # Handle downloads
+            if results:
+                if len(results) == 1:
+                    _, midi_file = results[0]
+                    status_manager.log(f"Downloading: {midi_file.name}")
+                    files.download(str(midi_file))
+                else:
+                    if zip_output:
+                        zip_filename = output_dir / "midi_files.zip"
+                        with zipfile.ZipFile(str(zip_filename), 'w') as zipf:
+                            for _, midi_file in results:
+                                zipf.write(str(midi_file), arcname=midi_file.name)
+                        status_manager.log(f"Downloading: {zip_filename.name}")
+                        files.download(str(zip_filename))
+                    else:
+                        status_manager.log("Downloading individual files...")
+                        for _, midi_file in results:
+                            files.download(str(midi_file))
+            else:
+                status_manager.log("No files converted successfully", "error")
+
+            # Cleanup
+            if not keep_mp3:
+                converter.cleanup_temp_files()
+
+        except ValueError as e:
+            status_manager.log(f"Input error: {e}", "error")
+        except Exception as e:
+            status_manager.log(f"Unexpected error: {e}", "error")
+        finally:
+            enable_buttons()
+
+    # Bind events
+    start_button.on_click(on_start_button_clicked)
+    cancel_button.on_click(on_cancel_button_clicked)
+
+    # Create improved layout
+
+    # Input Sources Section
+    input_section = widgets.VBox([
+        widgets.HTML('<div class="glass-card">'),
+        widgets.HTML('<div class="section-title">Input Sources</div>'),
+        widgets.HTML("<div class='widget-label'>YouTube URLs</div>"),
+        youtube_urls_input,
+        widgets.HTML('<div style="height: 20px;"></div>'),
+        widgets.HTML("<div class='widget-label'>Upload Audio Files</div>"),
+        widgets.HTML("<div class='widget-file-upload audio-upload'>"),
+        upload_button,
+        widgets.HTML("</div>"),
+        widgets.HTML('</div>')
+    ])
+
+    # Settings Section
+    settings_section = widgets.VBox([
+        widgets.HTML('<div class="glass-card">'),
+        widgets.HTML('<div class="section-title">Settings</div>'),
+        widgets.HTML("<div class='widget-label'>Custom Name (optional)</div>"),
+        custom_name_input,
+        widgets.HTML('<div style="height: 16px;"></div>'),
+        widgets.HBox([
+            widgets.VBox([
+                widgets.HTML("<div class='widget-label'>Chunk Duration (seconds)</div>"),
+                chunk_duration_input
+            ], layout=widgets.Layout(width='48%')),
+            widgets.VBox([
+                widgets.HTML("<div class='widget-label'>Max Note Duration (seconds)</div>"),
+                max_duration_input
+            ], layout=widgets.Layout(width='48%'))
+        ]),
+        widgets.HTML('<div style="height: 16px;"></div>'),
+        widgets.HBox([
+            widgets.VBox([
+                widgets.HTML("<div class='widget-label'>Start Time (seconds)</div>"),
+                start_time_input
+            ], layout=widgets.Layout(width='48%')),
+            widgets.VBox([
+                widgets.HTML("<div class='widget-label'>End Time (0 = until end)</div>"),
+                end_time_input
+            ], layout=widgets.Layout(width='48%'))
+        ]),
+        widgets.HTML('<div style="height: 16px;"></div>'),
+        widgets.HBox([zip_files_checkbox, keep_mp3_checkbox],
+                    layout=widgets.Layout(justify_content='space-around')),
+        widgets.HTML('<div style="height: 16px;"></div>'),
+        widgets.HTML("<div class='widget-label'>Cookie File (for age-restricted videos)</div>"),
+        widgets.HTML("<div class='widget-file-upload cookie-upload'>"),
+        cookie_upload,
+        widgets.HTML("</div>"),
+        widgets.HTML('</div>')
+    ])
+
+    # Main layout - two columns
+    main_layout = widgets.HBox([
+        widgets.VBox([input_section], layout=widgets.Layout(width='50%', padding='0 10px 0 0')),
+        widgets.VBox([settings_section], layout=widgets.Layout(width='50%', padding='0 0 0 10px'))
+    ])
+
+    display(main_layout)
+
+    # Centralized Control Buttons
+    display(HTML('<div class="main-controls">'))
+    control_layout = widgets.HBox([start_button, cancel_button])
+    display(control_layout)
+    display(HTML('</div>'))
+
+    # Current File Display
+    display(HTML('<div class="glass-card">'))
+    display(status_manager.current_file_display)
+    display(HTML('</div>'))
+
+    # Processing Log Section
+    log_section = widgets.VBox([
+        widgets.HTML('<div class="glass-card">'),
+        widgets.HTML('<div class="section-title">Processing Log</div>'),
+        status_manager.log_display,
+        widgets.HTML('</div>')
+    ])
+
+    display(log_section)
+    display(HTML('</div>'))  # Close main container
+
+    # Apply JavaScript fixes for upload buttons
+    display(Javascript('''
+        setTimeout(() => {
+            // Force consistent upload button styling
+            const fileUploads = document.querySelectorAll('.widget-file-upload');
+            fileUploads.forEach(upload => {
+                upload.style.border = '2px dashed #667eea';
+                upload.style.borderRadius = '12px';
+                upload.style.padding = '24px';
+                upload.style.background = 'rgba(102, 126, 234, 0.05)';
+                upload.style.transition = 'all 0.3s ease';
+                upload.style.minHeight = '80px';
+                upload.style.display = 'flex';
+                upload.style.alignItems = 'center';
+                upload.style.justifyContent = 'center';
+                upload.style.position = 'relative';
+
+                // Add hover effects
+                upload.addEventListener('mouseenter', () => {
+                    upload.style.borderColor = '#764ba2';
+                    upload.style.background = 'rgba(102, 126, 234, 0.1)';
+                    upload.style.boxShadow = '0 4px 16px rgba(102, 126, 234, 0.2)';
+                });
+
+                upload.addEventListener('mouseleave', () => {
+                    upload.style.borderColor = '#667eea';
+                    upload.style.background = 'rgba(102, 126, 234, 0.05)';
+                    upload.style.boxShadow = 'none';
+                });
+            });
+
+            // Style the actual file input buttons inside
+            const uploadButtons = document.querySelectorAll('.widget-file-upload button');
+            uploadButtons.forEach(btn => {
+                btn.style.background = 'transparent';
+                btn.style.border = 'none';
+                btn.style.color = '#667eea';
+                btn.style.fontWeight = '500';
+                btn.style.fontSize = '14px';
+            });
+
+            // Remove Colab's default widget descriptions
+            document.querySelectorAll('.widget-label-basic').forEach(el => {
+                if (!el.closest('.widget-checkbox')) {
+                    el.style.display = 'none';
+                }
+            });
+
+            // Center the main control buttons
+            const mainControls = document.querySelector('.main-controls');
+            if (mainControls) {
+                mainControls.style.display = 'flex';
+                mainControls.style.justifyContent = 'center';
+                mainControls.style.gap = '20px';
+                mainControls.style.margin = '30px 0';
+            }
+        }, 100);
+    '''))
+
+# --------------- Main Function ---------------
+
+def main():
+    """Main function to run the unified converter."""
+    create_unified_ui()
+
+if __name__ == "__main__":
+    main()

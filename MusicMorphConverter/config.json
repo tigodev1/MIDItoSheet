@@ -1,0 +1,66 @@
+{
+  "app": {
+    "name": "MIDI Studio",
+    "version": "1.0.0",
+    "description": "Transform YouTube videos into MIDI files and generate beautiful sheet music"
+  },
+  "youtube": {
+    "apiKey": "AIzaSyAvnyK6kYbgIw4YFO9tHx_ILm7nAg67ZLI",
+    "maxResults": 25,
+    "quality": "highest",
+    "defaultFormat": "mp4"
+  },
+  "conversion": {
+    "youtubeMidiDefaults": {
+      "quality": "high",
+      "format": "standard",
+      "sampleRate": 44100,
+      "timeout": 300000
+    },
+    "midiSheetDefaults": {
+      "clef": "treble",
+      "keySignature": "C",
+      "timeSignature": "4/4",
+      "pageSize": "letter"
+    }
+  },
+  "audio": {
+    "supportedFormats": ["mp3", "wav", "midi", "mid", "flac", "m4a"],
+    "maxFileSize": 52428800,
+    "uploadDirectory": "uploads"
+  },
+  "server": {
+    "port": 5000,
+    "cors": {
+      "origin": "*",
+      "credentials": true
+    }
+  },
+  "features": {
+    "youtubeSearch": true,
+    "realtimeProgress": true,
+    "audioPreview": true,
+    "batchConversion": false,
+    "cloudStorage": false
+  },
+  "credits": {
+    "author": "Tigo",
+    "contributors": [
+      "YouTube Data API v3",
+      "ytdl-core for video downloading",
+      "FFmpeg for audio processing",
+      "Spotify for UI inspiration"
+    ],
+    "libraries": [
+      "React & TypeScript",
+      "Tailwind CSS",
+      "Radix UI Components",
+      "TanStack Query",
+      "Express.js",
+      "Drizzle ORM"
+    ],
+    "version": "1.0.0",
+    "license": "MIT",
+    "repository": "https://github.com/midi-studio/app"
+  }
+}
